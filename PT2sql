@@ -1,0 +1,171 @@
+SELECT * FROM MEMBERS;
+SELECT * FROM BOOKS;
+SELECT * FROM RENT ORDER BY M_NUM;
+
+-- 도서관리, 도서관운영에 관한 정보
+
+-- 1. 도서관 운영현황 -> 등급별 대여가능 권수
+-- 2. 다독왕, 주 이용객이 선호하는 도서분야
+-- 3. 가장 방문빈도가 높은 지역 -> 지역별 선호 도서분야
+-- 4. 연체자, 연체지역, 연체금액(연체일수 * 대여권수 * 1,000) 또는 정지일수(연체일수 * 대여수량)
+-- 5. 도서관 도서분야별-성별, 연령별 대출 통계
+
+
+
+-- 누락된 데이터 추가( 회원번호 : 93, 94,97번 추가 )
+SELECT * FROM RENT ORDER BY M_NUM;
+
+INSERT INTO RENT(M_NUM, ST_DATE, DUE_DATE, FIN_DATE,NO) VALUES (93,NULL,NULL,NULL,NULL);
+INSERT INTO RENT(M_NUM, ST_DATE, DUE_DATE, FIN_DATE,NO) VALUES (94,NULL,NULL,NULL,NULL);
+INSERT INTO RENT(M_NUM, ST_DATE, DUE_DATE, FIN_DATE,NO) VALUES (97,NULL,NULL,NULL,NULL);
+
+SELECT * FROM RENT ORDER BY M_NUM;
+
+-- 현재 대여시스템-> 등급별 대여가능권수 및 누적대여횟수
+SELECT r.m_num 회원번호 ,m.m_name 이름, count(r.st_date)||'회' 누적대여횟수, m.grade 등급,
+CASE
+WHEN grade='1' THEN '5권'
+WHEN grade='2' THEN '4권'
+WHEN grade='3' THEN '3권'
+WHEN grade='4' THEN '2권'
+ELSE '1권' END "등급별 대여가능권수"
+FROM members m, rent r
+WHERE m.m_num = r.m_num
+GROUP BY (r.m_num, m.m_name, m.grade)
+ORDER BY r.m_num;
+
+--연체현황
+SELECT 
+R.M_NUM 회원번호, M.M_NAME 이름,
+DECODE(R.FIN_DATE, NULL, '연체중') 반납여부,
+COUNT(*)||'권' 연체도서수량
+FROM RENT R, MEMBERS M
+WHERE SUBSTR(R.ST_DATE,1,1) = 2 
+AND R.FIN_DATE IS NULL 
+AND R.M_NUM = M.M_NUM 
+GROUP BY R.M_NUM,M.M_NAME,
+DECODE(R.FIN_DATE, NULL, '연체중')
+ORDER BY 1 ASC;
+
+SELECT * FROM RENT ORDER BY M_NUM;
+
+
+--2 연체금액
+SELECT 
+R.M_NUM 회원번호,
+M.M_NAME 회원이름,
+COUNT(*)||'권' 연체권수,
+SUM(TO_DATE(FIN_DATE)-TO_DATE(TO_CHAR(DUE_DATE, 'yyyymmdd')))||'일' 총연체일,
+TO_CHAR((SUM(TO_DATE(TO_CHAR(FIN_DATE, 'yyyymmdd'))-TO_DATE(DUE_DATE))*1000),'999,999')||'원' 연체료
+FROM RENT R, MEMBERS M
+WHERE TO_DATE(TO_CHAR(FIN_DATE, 'yyyymmdd'))-TO_DATE(DUE_DATE) > 0 
+AND R.M_NUM = M.M_NUM
+GROUP BY 
+R.M_NUM, M.M_NAME
+ORDER BY 1;
+
+--2 연체지역
+SELECT
+M.ADDRESS 연체지역,
+COUNT(*)||'명' 총연체자
+FROM RENT R, MEMBERS M 
+WHERE R.M_NUM = M.M_NUM AND SUBSTR(R.ST_DATE,1,1) = 2 
+AND R.FIN_DATE IS NULL
+GROUP BY M.ADDRESS,
+DECODE(R.FIN_DATE, NULL, '연체중')
+ORDER BY 2 DESC;
+
+
+
+--도서관 주방문객들의 선호도서, 장르 -> 신규도서추가 때 필요한 데이터
+
+-- 개인 장르별 대여 현황
+CREATE OR REPLACE VIEW view_1 AS
+SELECT m.m_num num, b.genere genere, count(genere) c
+FROM members m, books b, rent r
+WHERE m.m_num=r.m_num AND b.NO=r.NO
+GROUP BY m.m_num, genere;
+SELECT * FROM view_1
+ORDER BY 1;
+
+-- 개인별 선호 장르 
+CREATE OR REPLACE VIEW view_2 AS
+SELECT v.num num,
+MAX(genere) KEEP(DENSE_RANK FIRST ORDER BY count DESC) AS genere
+FROM view_1 v
+GROUP BY v.num;
+SELECT * FROM view_2  ;
+
+select  m_num,  (select  rownum,  a.*  from
+(select  num,  genere, c   from view_1     order by 1 , 3   desc)  a 
+
+ where rownum < 2)  from members   where  m_num = num ;
+
+
+
+
+
+select m_num , (
+select genere from (
+select  rownum rum,  a.*  from
+(select  num,  genere, c   from view_1     order by 1 , 3   desc)  a )   where num = m_num and rum < 2) 
+from members;
+
+
+select RNUM 순위, name 이름, TOTAL||'회' 빌린횟수, GENERE "가장 많이 빌린 장르"
+from(
+select rownum RNUM, a.* from(
+select M.M_NAME name, COUNT(*) TOTAL, V.GENERE GENERE
+from MEMBERS M, RENT R, VIEW_2 V
+where M.M_NUM = R.M_NUM and M.M_NUM=V.NUM
+group by M.M_NAME, V.GENERE
+order by 2 desc) a);
+
+
+
+
+
+--v3 --지역에 따른 장르별 빌린 권 수
+CREATE OR REPLACE VIEW view_3 AS
+SELECT m.address address, b.genere genere,  count(*) count
+FROM members m, books b, rent r
+WHERE m.m_num=r.m_num AND b.NO=r.NO
+GROUP BY genere, m.address ORDER BY m.address, count DESC;
+SELECT * FROM view_3;
+--v4 --지역에 따른 장르별 빌린 순위(v3의count가져와서 rank())
+CREATE OR REPLACE VIEW VIEW_4 AS
+SELECT V.ADDRESS ADDRESS, V.GENERE GENERE,
+RANK() OVER(PARTITION BY V.ADDRESS ORDER BY V.COUNT DESC)RANK
+FROM VIEW_3 V;
+SELECT * FROM VIEW_4;
+--v5 --v4에서 rank가 1인것만 가져옴
+CREATE OR REPLACE VIEW view_5 AS
+SELECT v.address 거주지, v.genere 징르, v.rank 순위
+FROM view_4 v WHERE v.rank=1;
+
+SELECT * FROM view_5;
+
+
+-- 전체 종합통계
+SELECT
+CASE
+WHEN  SUBSTR(M.SEX,1,1)='m' THEN '남'
+WHEN  SUBSTR(M.SEX,1,1)='f' THEN '여'
+WHEN SUBSTR(M.SEX,1,1) IS NULL THEN '총합'
+END 성별,
+DECODE(SUBSTR(M.AGE,1,1)||'0대','0대',' 합계',SUBSTR(M.AGE,1,1)||'0대') 연령대,
+COUNT(DECODE(SUBSTR(B.GENERE,1,2),'총류','총류'))총류,
+COUNT(DECODE(SUBSTR(B.GENERE,1,2),'예술','예술'))예술,
+COUNT(DECODE(SUBSTR(B.GENERE,1,2),'기술','기술'))기술,
+COUNT(DECODE(SUBSTR(B.GENERE,1,2),'언어','언어'))언어,
+COUNT(DECODE(SUBSTR(B.GENERE,1,2),'철학','철학'))철학,
+COUNT(DECODE(SUBSTR(B.GENERE,1,2),'종교','종교'))종교,
+COUNT(DECODE(SUBSTR(B.GENERE,1,2),'순수','순수'))순수,
+COUNT(DECODE(SUBSTR(B.GENERE,1,2),'사회','사회'))사회,
+COUNT(DECODE(SUBSTR(B.GENERE,1,2),'역사','역사'))역사,
+COUNT(DECODE(SUBSTR(B.GENERE,1,2),'문학','문학'))문학,
+COUNT(SUBSTR(R.NO,1,1))"합계"
+FROM MEMBERS M , BOOKS B, RENT R
+WHERE R.M_NUM=M.M_NUM AND R.NO=B.NO
+GROUP BY ROLLUP(SUBSTR(M.SEX,1,1),SUBSTR(M.AGE,1,1))
+ORDER BY 1 ,SUBSTR(M.AGE,1,1);

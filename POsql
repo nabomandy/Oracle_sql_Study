@@ -1,0 +1,241 @@
+--도서 관리
+create table members
+(m_name varchar2(20),
+m_num number(3),
+grade number(1),
+address varchar2(20),
+tel varchar(15),
+age number(3),
+sex varchar(2));
+desc members;
+
+create table books
+(no number(10),
+genere varchar2(10),
+b_name varchar(100),
+b_author varchar2(100),
+b_pub varchar2(100),
+b_year number(5),
+b_total number(5));
+
+create table rent
+(m_num number(3),
+st_date date,
+due_date date,
+fin_date date,
+no number(10));
+
+select * from rent;
+
+
+--3. 다독왕, 주 이용객이 선호하는 도서분야  제일 책을 많이 읽은 사람
+select * from members;
+select * from books;
+select * from rent;
+
+SELECT M.M_NAME, COUNT(M_NUM)
+FROM RENT R, MEMBERS M
+WHERE R.M_NUM = M.M_NAME
+GROUP BY M_NUM
+ORDER BY M_NUM ;
+
+SELECT M_NUM, COUNT(M_NUM),
+FROM RENT
+GROUP BY M_NUM 
+ORDER BY M_NUM;
+
+SELECT R.M_NUM, COUNT(R.M_NUM)
+FROM RENT R
+GROUP BY M_NUM
+ORDER BY M_NUM;
+
+select 
+m_num,
+decode(substr(st_date,1,1),2,'대여o') 대여여부,
+decode(fin_date, null, '연체됨',substr(st_date,1,1),2,'반납o') 연체여부
+from rent
+where substr(st_date,1,1) = 2 and fin_date is null;
+
+
+select r.m_num "회원번호", m.m_name "회원이름"
+from rent r, members m
+where r.m_num = (select m_num from rent where fin_date = null) 
+and r.m_num = m.m_num;
+
+select rnum 순위, name 이름, total 빌린횟수
+from(
+select rownum rnum, a.* from(
+select m.m_name name, count(*) total
+from members m, rent r
+where m.m_num = r.m_num
+group by m.m_name
+order by 2 desc) a)
+where total >= 5;
+
+--지역별선호도서
+select m.address, b.genere, count(*)from members m, books b, rent r
+where r.m_num=m.m_num and r.no=b.no
+group by(m.address, b.genere) order by m.address,count(*)desc;
+
+--
+select m.address, count(*)"지역별 빌린 횟수" from members m, books b, rent r
+where r.no=b.no and r.m_num=m.m_num --어떤회원이 어떤도서를 빌렸는지
+group by m.ADDRESS order by count(*) desc;--가장 방문빈도 높은지역
+
+ 
+ 
+ select m.m_num num, b.genere genere, count(genere) count
+from members m, books b, rent r
+where m.m_num=r.m_num and b.no=r.no
+group by m.m_num, genere
+order by 2;
+
+
+create or replace view view_1 as
+select m.m_num num, b.genere genere, count(genere) count
+from members m, books b, rent r
+where m.m_num=r.m_num and b.no=r.no
+group by m.m_num, genere;
+
+create or replace view view_2 as
+select v.num num,
+max(genere) keep(de
+nse_rank first order by count desc) as genere
+from view_1 v
+group by v.num;
+
+select rnum 순위, name 이름, total 빌린횟수, genere 장르
+from(
+select rownum rnum, a.* from(
+select m.m_name name, count(*) total, v.genere genere
+from members m, rent r, view_2 v
+where m.m_num = r.m_num and m.m_num=v.num
+group by m.m_name, v.genere
+order by 2 desc) a);
+
+
+
+create or replace view view_1 as
+select m.m_num num, b.genere genere, count(genere) count
+from members m, books b, rent r
+where m.m_num=r.m_num and b.no=r.no
+group by m.m_num, genere;
+
+
+create or replace view view_2 as
+select v.num num,
+max(genere) keep(dense_rank first order by count desc) as genere
+from view_1 v
+group by v.num;
+
+select * from view2;
+
+select rnum 순위, name 이름, total 빌린횟수, genere 장르
+from(
+select rownum rnum, a.* from(
+select m.m_name name, count(*) total, v.genere genere
+from members m, rent r, view_2 v
+where m.m_num = r.m_num and m.m_num=v.num
+group by m.m_name, v.genere
+order by total desc) a);
+
+
+select * from members m, books b, rent r
+where r.m_num=m.m_num and r.no=b.no order by m.m_num;
+
+select
+decode(substr(m.sex,1,1),'m','남','여')성별,
+substr(m.age,1,1)||'0대' 연령대,
+count(decode(substr(b.genere,1,2),'총류','총류'))총류, 
+count(decode(substr(b.genere,1,2),'예술','예술'))예술, 
+count(decode(substr(b.genere,1,2),'기술','기술'))기술, 
+count(decode(substr(b.genere,1,2),'언어','언어'))언어, 
+count(decode(substr(b.genere,1,2),'철학','철학'))철학, 
+count(decode(substr(b.genere,1,2),'종교','종교'))종교, 
+count(decode(substr(b.genere,1,2),'순수','순수'))순수, 
+count(decode(substr(b.genere,1,2),'사회','사회'))사회, 
+count(decode(substr(b.genere,1,2),'역사','역사'))역사, 
+count(decode(substr(b.genere,1,2),'문학','문학'))문학,
+count(substr(r.no,1,1))"합계"
+from members m , books b, rent r
+where r.m_num=m.m_num and r.no=b.no
+group by (substr(m.sex,1,1),substr(m.age,1,1))
+order by substr(m.sex,1,1)desc,substr(m.age,1,1);
+
+
+select
+case
+when  substr(m.sex,1,1)='m' then '남'
+when  substr(m.sex,1,1)='f' then '여'
+when substr(m.sex,1,1) is null then '소계'
+end 성별,
+decode(substr(m.age,1,1)||'0대','0대',' 합계',
+substr(m.age,1,1)||'0대') 연령대,
+count(decode(substr(b.genere,1,2),'총류','총류'))총류,
+count(decode(substr(b.genere,1,2),'예술','예술'))예술,
+count(decode(substr(b.genere,1,2),'기술','기술'))기술,
+count(decode(substr(b.genere,1,2),'언어','언어'))언어,
+count(decode(substr(b.genere,1,2),'철학','철학'))철학,
+count(decode(substr(b.genere,1,2),'종교','종교'))종교,
+count(decode(substr(b.genere,1,2),'순수','순수'))순수,
+count(decode(substr(b.genere,1,2),'사회','사회'))사회,
+count(decode(substr(b.genere,1,2),'역사','역사'))역사,
+count(decode(substr(b.genere,1,2),'문학','문학'))문학,
+count(substr(r.no,1,1))"합계"
+from members m , books b, rent r
+where r.m_num=m.m_num and r.no=b.no
+group by rollup(substr(m.sex,1,1),substr(m.age,1,1))
+order by substr(m.sex,1,1)desc,substr(m.age,1,1);
+
+
+
+select
+case
+when  substr(m.sex,1,1)='m' then '남'
+when  substr(m.sex,1,1)='f' then '여'
+when substr(m.sex,1,1) is null then '총합'
+end 성별,
+decode(substr(m.age,1,1)||'0대','0대',' 합계',substr(m.age,1,1)||'0대') 연령대,
+count(decode(substr(b.genere,1,2),'총류','총류'))총류,
+count(decode(substr(b.genere,1,2),'예술','예술'))예술,
+count(decode(substr(b.genere,1,2),'기술','기술'))기술,
+count(decode(substr(b.genere,1,2),'언어','언어'))언어,
+count(decode(substr(b.genere,1,2),'철학','철학'))철학,
+count(decode(substr(b.genere,1,2),'종교','종교'))종교,
+count(decode(substr(b.genere,1,2),'순수','순수'))순수,
+count(decode(substr(b.genere,1,2),'사회','사회'))사회,
+count(decode(substr(b.genere,1,2),'역사','역사'))역사,
+count(decode(substr(b.genere,1,2),'문학','문학'))문학,
+count(substr(r.no,1,1))"합계"
+from members m , books b, rent r
+where r.m_num=m.m_num and r.no=b.no
+group by rollup(substr(m.sex,1,1),substr(m.age,1,1))
+order by 1 ,substr(m.age,1,1);
+
+
+
+select * from members m, books b, rent r
+where r.m_num=m.m_num and r.no=b.no order by m.m_num;
+
+select
+case
+when  substr(m.sex,1,1)='m' then '남'
+when  substr(m.sex,1,1)='f' then '여'
+when substr(m.sex,1,1) is null then '남,여 총합'
+end 성별,
+decode(substr(m.age,1,1)||'0대','0대',' 합계',substr(m.age,1,1)||'0대') 연령대,
+count(decode(substr(b.genere,1,2),'총류','총류'))총류,
+count(decode(substr(b.genere,1,2),'예술','예술'))예술,
+count(decode(substr(b.genere,1,2),'기술','기술'))기술,
+count(decode(substr(b.genere,1,2),'언어','언어'))언어,
+count(decode(substr(b.genere,1,2),'철학','철학'))철학,
+count(decode(substr(b.genere,1,2),'종교','종교'))종교,
+count(decode(substr(b.genere,1,2),'순수','순수'))순수,
+count(decode(substr(b.genere,1,2),'사회','사회'))사회,
+count(decode(substr(b.genere,1,2),'역사','역사'))역사,
+count(decode(substr(b.genere,1,2),'문학','문학'))문학,
+count(substr(r.no,1,1))"합계"
+from members m , books b, rent r
+where r.m_num=m.m_num and r.no=b.no
+group by rollup(substr(m.sex,1,1),substr(m.age,1,1))
+order by substr(m.sex,1,1)desc,substr(m.age,1,1);
